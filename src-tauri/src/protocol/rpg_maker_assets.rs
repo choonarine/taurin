@@ -29,6 +29,16 @@ pub fn serve(www_dir: &Path, request: &tauri::http::Request<Vec<u8>>) -> Respons
 
     match fs::read(&path) {
         Ok(contents) => rpg_maker_asset_response(request, &path, contents),
+        Err(error)
+            if error.kind() == io::ErrorKind::NotFound
+                && request.uri().path() == "/VirtualController.js" =>
+        {
+            response(
+                StatusCode::OK,
+                "text/javascript; charset=utf-8",
+                b"// Optional RPG Maker mobile controller shim for desktop runtime.\n".to_vec(),
+            )
+        }
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             response(StatusCode::NOT_FOUND, "text/plain", b"not found".to_vec())
         }
