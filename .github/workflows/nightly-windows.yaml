@@ -1,0 +1,87 @@
+name: Update Nightly build for Windows on GitHub Releases
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-release
+  cancel-in-progress: true
+
+jobs:
+  nightly:
+    runs-on: windows-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Get short commit hash
+        id: vars
+        shell: bash
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Build
+        run: pnpm tauri build
+
+      - name: Prepare release asset
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release
+
+          $exe = Get-ChildItem "src-tauri/target/release" -Filter "taurin.exe" | Select-Object -First 1
+
+          if (-not $exe) {
+            Write-Error "taurin.exe was not found in src-tauri/target/release"
+            exit 1
+          }
+
+          Copy-Item $exe.FullName "release/taurin.exe"
+
+      - name: Move nightly tag
+        shell: bash
+        run: |
+          git tag -f nightly
+          git push origin nightly --force
+
+      - name: Update Nightly Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: "Nightly ${{ steps.vars.outputs.sha_short }}"
+          body: "Nightly build for commit `${{ steps.vars.outputs.sha_short }}`."
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          files: |
+            release/taurin.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
