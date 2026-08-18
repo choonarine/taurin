@@ -1,8 +1,12 @@
 use std::{
-    env, fs,
+    env,
     process::Command,
     time::{SystemTime, UNIX_EPOCH},
 };
+
+// NOTE: std::fs is required for fetching device information on Linux.
+#[cfg(target_os = "linux")]
+use std::fs;
 
 pub fn log_startup_environment() {
     let executable = env::current_exe()
